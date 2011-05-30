@@ -13,6 +13,14 @@ try:
 except ImportError:
     import simplejson as json
 
+GATEWAY_PORT = 2195
+GATEWAY_HOST = 'gateway.push.apple.com'
+GATEWAY_SANDBOX_HOST = 'gateway.sandbox.push.apple.com'
+
+FEEDBACK_PORT = 2196
+FEEDBACK_HOST = 'feedback.push.apple.com'
+FEEDBACK_SANDBOX_HOST = 'feedback.sandbox.push.apple.com'
+
 MAX_PAYLOAD_LENGTH = 256
 
 class APNs(object):
@@ -193,10 +201,8 @@ class FeedbackConnection(APNsConnection):
     """
     def __init__(self, use_sandbox=False, **kwargs):
         super(FeedbackConnection, self).__init__(**kwargs)
-        self.server = (
-            'feedback.push.apple.com',
-            'feedback.sandbox.push.apple.com')[use_sandbox]
-        self.port = 2196
+        self.server = FEEDBACK_SANDBOX_HOST if use_sandbox else FEEDBACK_HOST
+        self.port = FEEDBACK_PORT
 
     def _chunks(self):
         BUF_SIZE = 4096
@@ -247,10 +253,8 @@ class GatewayConnection(APNsConnection):
     """
     def __init__(self, use_sandbox=False, **kwargs):
         super(GatewayConnection, self).__init__(**kwargs)
-        self.server = (
-            'gateway.push.apple.com',
-            'gateway.sandbox.push.apple.com')[use_sandbox]
-        self.port = 2195
+        self.server = GATEWAY_SANDBOX_HOST if use_sandbox else GATEWAY_HOST
+        self.port = GATEWAY_PORT
 
     def _get_notification(self, token_hex, payload):
         """

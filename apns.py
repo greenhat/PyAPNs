@@ -21,7 +21,28 @@ FEEDBACK_PORT = 2196
 FEEDBACK_HOST = 'feedback.push.apple.com'
 FEEDBACK_SANDBOX_HOST = 'feedback.sandbox.push.apple.com'
 
+NOTIFICATION_COMMAND = 0
+
+NOTIFICATION_FORMAT = (
+    '!'   # network big-endian
+    'B'   # command
+    'H'   # token length
+    '32s' # token
+    'H'   # payload length
+    '%ds' # payload
+)
+
+FEEDBACK_FORMAT = (
+    '!'   # network big-endian
+    'I'   # time
+    'H'   # token length
+    '32s' # token
+)
+
+FEEDBACK_FORMAT_LENGTH = 38 # struct.calcsize(FEEDBACK_FORMAT)
+TOKEN_LENGTH = 32
 MAX_PAYLOAD_LENGTH = 256
+
 
 class APNs(object):
     """A class representing an Apple Push Notification service connection"""
@@ -37,35 +58,6 @@ class APNs(object):
         self.key_file = key_file
         self._feedback_connection = None
         self._gateway_connection = None
-
-    @staticmethod
-    def packed_ushort_big_endian(num):
-        """
-        Returns an unsigned short in packed big-endian (network) form
-        """
-        return pack('>H', num)
-
-    @staticmethod
-    def unpacked_ushort_big_endian(bytes):
-        """
-        Returns an unsigned short from a packed big-endian (network) byte
-        array
-        """
-        return unpack('>H', bytes)[0]
-
-    @staticmethod
-    def packed_uint_big_endian(num):
-        """
-        Returns an unsigned int in packed big-endian (network) form
-        """
-        return pack('>I', num)
-
-    @staticmethod
-    def unpacked_uint_big_endian(bytes):
-        """
-        Returns an unsigned int from a packed big-endian (network) byte array
-        """
-        return unpack('>I', bytes)[0]
 
     @property
     def feedback_server(self):
@@ -231,17 +223,19 @@ class FeedbackConnection(APNsConnection):
                 break
 
             while len(buff) > 6:
-                token_length = APNs.unpacked_ushort_big_endian(buff[4:6])
-                bytes_to_read = 6 + token_length
-                if len(buff) >= bytes_to_read:
-                    fail_time_unix = APNs.unpacked_uint_big_endian(buff[0:4])
-                    fail_time = datetime.utcfromtimestamp(fail_time_unix)
-                    token = b2a_hex(buff[6:bytes_to_read])
+                
+                if len(buff) >= FEEDBACK_FORMAT_LENGTH:
+                    
+                    fail_time_unix, token_len, token = unpack(
+                        FEEDBACK_FORMAT, buff[:FEEDBACK_FORMAT_LENGTH])
 
-                    yield (token, fail_time)
+                    token_hex = b2a_hex(token)
+                    fail_time = datetime.utcfromtimestamp(fail_time_unix)
+
+                    yield (token_hex, fail_time)
 
                     # Remove data for current token from buffer
-                    buff = buff[bytes_to_read:]
+                    buff = buff[FEEDBACK_FORMAT_LENGTH:]
                 else:
                     # break out of inner while loop - i.e. go and fetch
                     # some more data and append to buffer
@@ -261,14 +255,11 @@ class GatewayConnection(APNsConnection):
         Takes a token as a hex string and a payload as a Python dict and sends
         the notification
         """
-        token_bin = a2b_hex(token_hex)
-        token_length_bin = APNs.packed_ushort_big_endian(len(token_bin))
-        payload_json = payload.json()
-        payload_length_bin = APNs.packed_ushort_big_endian(len(payload_json))
-
-        notification = ('\0' + token_length_bin + token_bin
-            + payload_length_bin + payload_json)
-
+        token = a2b_hex(token_hex)
+        payload = payload.json()
+        fmt = NOTIFICATION_FORMAT % len(payload)
+        notification = pack(fmt, NOTIFICATION_COMMAND, TOKEN_LENGTH, token, 
+                            len(payload), payload)
         return notification
 
     def send_notification(self, token_hex, payload):

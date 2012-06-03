@@ -28,22 +28,17 @@ from datetime import datetime
 from socket import socket, AF_INET, SOCK_STREAM
 from struct import pack, unpack
 
-try:
-    from ssl import wrap_socket
-except ImportError:
-    from socket import ssl
-
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import select
+import ssl
+import json
 
 MAX_PAYLOAD_LENGTH = 256
+ERROR_RESPONSE_LENGTH = 6
 
 class APNs(object):
     """A class representing an Apple Push Notification service connection"""
 
-    def __init__(self, use_sandbox=False, cert_file=None, key_file=None):
+    def __init__(self, use_sandbox=False, cert_file=None, key_file=None, enhanced=False):
         """
         Set use_sandbox to True to use the sandbox (test) APNs servers.
         Default is False.
@@ -52,9 +47,17 @@ class APNs(object):
         self.use_sandbox = use_sandbox
         self.cert_file = cert_file
         self.key_file = key_file
+        self.enhanced = enhanced
         self._feedback_connection = None
         self._gateway_connection = None
 
+    @staticmethod
+    def unpacked_byte_bigendian(byte):
+        """
+        Returns a byte from a packed big-endian (network) form
+        """
+        return unpack('>b', byte)[0]
+    
     @staticmethod
     def packed_ushort_big_endian(num):
         """
@@ -100,7 +103,8 @@ class APNs(object):
             self._gateway_connection = GatewayConnection(
                 use_sandbox = self.use_sandbox,
                 cert_file = self.cert_file,
-                key_file = self.key_file
+                key_file = self.key_file,
+                enhanced = self.enhanced
             )
         return self._gateway_connection
 
@@ -109,10 +113,11 @@ class APNsConnection(object):
     """
     A generic connection class for communicating with the APNs
     """
-    def __init__(self, cert_file=None, key_file=None):
+    def __init__(self, cert_file=None, key_file=None, enhanced=False):
         super(APNsConnection, self).__init__()
         self.cert_file = cert_file
         self.key_file = key_file
+        self.enhanced = enhanced
         self._socket = None
         self._ssl = None
 
@@ -123,10 +128,23 @@ class APNsConnection(object):
         # Establish an SSL connection
         self._socket = socket(AF_INET, SOCK_STREAM)
         self._socket.connect((self.server, self.port))
-        if wrap_socket:
-            self._ssl = wrap_socket(self._socket, self.key_file, self.cert_file)
+        if self.enhanced:
+            self._socket.setblocking(0)
+            self._ssl = ssl.wrap_socket(self._socket, self.key_file, self.cert_file,
+                                        do_handshake_on_connect=False)
+            while True:
+                try:
+                    self._ssl.do_handshake()
+                    break
+                except ssl.SSLError, err:
+                    if ssl.SSL_ERROR_WANT_READ == err.args[0]:
+                        select.select([self._ssl], [], [])
+                    elif ssl.SSL_ERROR_WANT_WRITE == err.args[0]:
+                        select.select([], [self._ssl], [])
+                    else:
+                        raise
         else:
-            self._ssl = ssl(self._socket, self.key_file, self.cert_file)
+            self._ssl = ssl.wrap_socket(self._socket, self.key_file, self.cert_file)
 
     def _disconnect(self):
         if self._socket:
@@ -138,10 +156,27 @@ class APNsConnection(object):
         return self._ssl
 
     def read(self, n=None):
+        if self.enhanced:
+            select.select([], [self._connection()], [])
+            return self._connection().read(n)
         return self._connection().read(n)
 
     def write(self, string):
-        return self._connection().write(string)
+        if self.enhanced: # nonblocking socket
+            rlist, wlist, _ = select.select([self._connection()], [self._connection()], [])
+            if len(rlist) > 0: # there's error response from APNs
+                buff = self.read(ERROR_RESPONSE_LENGTH)
+                command = APNs.unpacked_byte_bigendian(buff[0])
+                if 8 != command: # not error response
+                    return None
+                status = APNs.unpacked_byte_bigendian(buff[1])
+                identifier = APNs.unpacked_uint_big_endian(buff[2:])
+
+                return (status, identifier)
+            if len(wlist) > 0:
+                self._connection().write(string)
+        else: # blocking socket
+            return self._connection().write(string)
 
 
 class PayloadAlert(object):
@@ -292,6 +327,26 @@ class GatewayConnection(APNsConnection):
 
         return notification
 
-    def send_notification(self, token_hex, payload):
-        self.write(self._get_notification(token_hex, payload))
+    def _get_enhanced_notification(self, token_hex, payload, identifier, expiry):
+        """
+        form notification data in an enhanced format
+        """
+        token_bin = a2b_hex(token_hex)
+        token_length_bin = APNs.packed_ushort_big_endian(len(token_bin))
+        payload_json = payload.json()
+        payload_length_bin = APNs.packed_ushort_big_endian(len(payload_json))
+        identifier_bin = APNs.packed_uint_big_endian(identifier)
+        expiry_bin = APNs.packed_uint_big_endian(expiry)
 
+        notification = ('\1' + identifier_bin + expiry_bin + token_length_bin + token_bin + payload_length_bin +
+                        payload_json)
+        return notification
+        
+    def send_notification(self, token_hex, payload, identifier=0, expiry=0):
+        """
+        in enhanced mode, send_notification may return error response from APNs if any
+        """
+        if self.enhanced:
+            return self.write(self._get_enhanced_notification(token_hex, payload, identifier, expiry))
+        else:
+            self.write(self._get_notification(token_hex, payload))

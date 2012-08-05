@@ -32,6 +32,8 @@ import select
 import ssl
 import json
 
+TIMEOUT = 60
+
 GATEWAY_PORT = 2195
 GATEWAY_HOST = 'gateway.push.apple.com'
 GATEWAY_SANDBOX_HOST = 'gateway.sandbox.push.apple.com'
@@ -173,9 +175,23 @@ class APNsConnection(object):
             return self._connection().read(n)
         return self._connection().read(n)
 
+    def recvall(self, n):
+        data = ""
+        while True:
+            more = self._connection().recv(n - len(data))
+            data += more
+            if len(data) >= n:
+                break
+            rlist, _, _ = select.select([self._connection()], [], [], TIMEOUT)
+            if not rlist:
+                raise socket.timeout
+            
     def write(self, string):
         if self.enhanced: # nonblocking socket
             rlist, wlist, _ = select.select([self._connection()], [self._connection()], [])
+            if len(wlist) > 0:
+                self._connection().sendall(string)
+
             if len(rlist) > 0: # there's error response from APNs
                 buff = self.read(ERROR_RESPONSE_LENGTH)
                 if len(buff) != ERROR_RESPONSE_LENGTH:
@@ -184,10 +200,8 @@ class APNsConnection(object):
                 if 8 != command: # not error response
                     return None
                 return (status, identifier)
-            if len(wlist) > 0:
-                self._connection().write(string)
         else: # blocking socket
-            return self._connection().write(string)
+            return self._connection().sendall(string)
 
 
 class PayloadAlert(object):

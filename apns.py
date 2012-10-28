@@ -24,7 +24,7 @@
 # SOFTWARE.
 
 from binascii import a2b_hex, b2a_hex
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import mktime
 from socket import socket, AF_INET, SOCK_STREAM, timeout, error as socket_error
 from struct import pack, unpack
@@ -230,9 +230,14 @@ class APNsConnection(object):
             try:
                 return self._connection().write(string)
             except socket_error, err:
-                if errno.EPIPE == err.errno:
-                    self._disconnect()
-                raise
+                try:
+                    if errno.EPIPE == err.errno:
+                        self._disconnect()
+                except AttributeError:
+                    if errno.EPIPE == err.args[0]:
+                        self._disconnect()
+                finally:
+                    raise err
 
 class PayloadAlert(object):
     def __init__(self, body, action_loc_key=None, loc_key=None,
@@ -388,19 +393,19 @@ class GatewayConnection(APNsConnection):
         payload_json = payload.json()
         payload_length_bin = APNs.packed_ushort_big_endian(len(payload_json))
         identifier_bin = APNs.packed_uint_big_endian(identifier)
-        expiry_bin = APNs.packed_uint_big_endian(int(mktime(expiry.timetuple())))
+
+        expiry_int = int(mktime(expiry.timetuple())) if isinstance(expiry, datetime) \
+            else int(expiry)
+            
+        expiry_bin = APNs.packed_uint_big_endian(expiry_int)
 
         notification = ('\1' + identifier_bin + expiry_bin + token_length_bin + token_bin
                         + payload_length_bin + payload_json)
 
         return notification
     
-    def send_notification(self, token_hex, payload, identifier=None, expiry=None):
+    def send_notification(self, token_hex, payload, identifier=0, expiry=0):
         if self.enhanced:
-            if not expiry: # by default, undelivered notification expires after 30 seconds
-                expiry = datetime.utcnow() + timedelta(30)
-            if not identifier:
-                identifier = 0
             self.write(self._get_enhanced_notification(token_hex, payload, identifier,
                                                        expiry))
         else:

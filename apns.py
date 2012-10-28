@@ -26,16 +26,20 @@
 from binascii import a2b_hex, b2a_hex
 from datetime import datetime, timedelta
 from time import mktime
-from socket import socket, AF_INET, SOCK_STREAM, timeout
+from socket import socket, AF_INET, SOCK_STREAM, timeout, error as socket_error
 from struct import pack, unpack
 
 import select
+import errno
+
+support_enhanced = True
 
 try:
     from ssl import wrap_socket
     from ssl import SSLError, SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE
 except ImportError:
     from socket import ssl as wrap_socket
+    support_enhanced = False
 
 try:
     import json
@@ -60,7 +64,7 @@ class APNs(object):
         self.use_sandbox = use_sandbox
         self.cert_file = cert_file
         self.key_file = key_file
-        self.enhanced = enhanced
+        self.enhanced = enhanced and support_enhanced
         self._feedback_connection = None
         self._gateway_connection = None
 
@@ -223,7 +227,12 @@ class APNsConnection(object):
                 raise timeout
         
         else: # not-enhanced format using blocking socket
-            return self._connection().sendall(string)
+            try:
+                return self._connection().write(string)
+            except socket_error, err:
+                if errno.EPIPE == err.errno:
+                    self._disconnect()
+                raise
 
 class PayloadAlert(object):
     def __init__(self, body, action_loc_key=None, loc_key=None,

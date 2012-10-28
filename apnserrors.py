@@ -6,6 +6,12 @@ class APNResponseError(Exception):
     def __init__(self, status, identifier):
         self.status = status
         self.identifier = identifier
+
+    def __repr__(self):
+        return "{}<identifier: {}>".format(self.__class__.__name__, self.identifier)
+
+    def __str__(self):
+        return self.__repr__()
         
 class ProcessingError(APNResponseError):
     def __init__(self, identifier):

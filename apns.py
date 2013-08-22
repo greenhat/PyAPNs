@@ -264,12 +264,13 @@ class PayloadAlert(object):
 
 class Payload(object):
     """A class representing an APNs message payload"""
-    def __init__(self, alert=None, badge=None, sound=None, custom={}):
+    def __init__(self, alert=None, badge=None, sound=None, content_available=True, custom={}):
         super(Payload, self).__init__()
         self.alert = alert
         self.badge = badge
         self.sound = sound
         self.custom = custom
+        self.content_available = content_available
         self._check_size()
 
     def dict(self):
@@ -288,7 +289,8 @@ class Payload(object):
             d['badge'] = int(self.badge)
 
         d = { 'aps': d }
-        d['aps']['content-available'] = 1
+        if self.content_available:
+            d['aps']['content-available'] = 1
         d.update(self.custom)
         return d
 
@@ -300,7 +302,7 @@ class Payload(object):
             raise PayloadTooLargeError()
 
     def __repr__(self):
-        attrs = ("alert", "badge", "sound", "custom")
+        attrs = ("alert", "badge", "sound", "custom", "content_available")
         args = ", ".join(["%s=%r" % (n, getattr(self, n)) for n in attrs])
         return "%s(%s)" % (self.__class__.__name__, args)
 

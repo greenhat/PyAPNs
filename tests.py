@@ -199,7 +199,7 @@ class TestAPNs(unittest.TestCase):
         custom_dict = {'foo': 'bar'}
         p = Payload(alert=alert_str, custom=custom_dict)
         d = p.dict()
-        self.assertEqual(d, {'foo': 'bar', 'aps': {'alert': 'foobar'}})
+        self.assertEqual(d, {'foo': 'bar', 'aps': {'alert': 'foobar', 'content-available': 1}})
 
 
     def testPayloadTooLargeError(self):

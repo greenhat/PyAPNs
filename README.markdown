@@ -39,7 +39,7 @@ identifier = 1234
 expiry = datetime.utcnow() + timedelta(30) # undelivered notification expires after 30 seconds
 
 try:
-    apns.gateway_server.send_notification(token_hex, payload)
+    apns.gateway_server.send_notification(token_hex, payload, identifier, expiry)
 except APNResponseError, err:
     # handle apn's error response
     # just tried notification is not sent and this response doesn't belong to that notification.

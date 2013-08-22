@@ -15,3 +15,4 @@ InvalidTopicSizeError = apnserrors.InvalidTopicSizeError
 InvalidPayloadSizeError = apnserrors.InvalidPayloadSizeError
 InvalidTokenError = apnserrors.InvalidTokenError
 UnknownError = apnserrors.UnknownError
+ShutdownError = apnserrors.ShutdownError

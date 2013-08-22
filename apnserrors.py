@@ -44,7 +44,13 @@ class InvalidPayloadSizeError(APNResponseError):
 class InvalidTokenError(APNResponseError):
     def __init__(self, identifier):
         super(InvalidTokenError, self).__init__(8, identifier)
-        
+
+class ShutdownError(APNResponseError):
+    # A status code of 10 indicates that the APNs server closed the connection (for example, to perform maintenance).
+    # via https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/CommunicatingWIthAPS.html#//apple_ref/doc/uid/TP40008194-CH101-SW1
+    def __init__(self, identifier):
+        super(ShutdownError, self).__init__(10, identifier)
+
 class UnknownError(APNResponseError):
     def __init__(self, identifier):
         super(UnknownError, self).__init__(255, identifier)

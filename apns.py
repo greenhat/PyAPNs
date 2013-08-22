@@ -217,7 +217,8 @@ class APNsConnection(object):
                         5: InvalidTokenSizeError,
                         6: InvalidTopicSizeError,
                         7: InvalidPayloadSizeError,
-                        8: InvalidTokenError }.get(status, UnknownError)(identifier)
+                        8: InvalidTokenError,
+                        10: ShutdownError}.get(status, UnknownError)(identifier)
 
             _, wlist, _ = select.select([], [self._connection()], [], TIMEOUT)
             if wlist:
@@ -287,6 +288,7 @@ class Payload(object):
             d['badge'] = int(self.badge)
 
         d = { 'aps': d }
+        d['aps']['content-available'] = 1
         d.update(self.custom)
         return d
 

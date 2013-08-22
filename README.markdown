@@ -62,6 +62,13 @@ of the Payload constructor.
 payload = Payload(alert="Hello World!", custom={'sekrit_number':123})
 ```
 
+## Prepare SSL certs
+```bash
+openssl pkcs12 -clcerts -nokeys -out cert.pem -in cert.p12
+openssl pkcs12 -nocerts - nodes -out key.pem -in key.p12
+```
+via https://blog.serverdensity.com/how-to-build-an-apple-push-notification-provider-server-tutorial/
+
 ## Travis Build Status
 
 [![Build Status](https://secure.travis-ci.org/simonwhitaker/PyAPNs.png?branch=master)](http://travis-ci.org/simonwhitaker/PyAPNs)

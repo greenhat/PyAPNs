@@ -279,10 +279,11 @@ class Payload(object):
         if self.alert:
             # Alert can be either a string or a PayloadAlert
             # object
-            if isinstance(self.alert, PayloadAlert):
-                d['alert'] = self.alert.dict()
-            else:
-                d['alert'] = self.alert
+            if self.alert is not None:
+                if isinstance(self.alert, PayloadAlert):
+                    d['alert'] = self.alert.dict()
+                else:
+                    d['alert'] = self.alert
         if self.sound:
             d['sound'] = self.sound
         if self.badge is not None:

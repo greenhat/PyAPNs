@@ -69,24 +69,17 @@ by Denys Zadorozhnyi
 Rather then writing every time code to deal with invalid tokens from APNS feedback service and deleting sent push notifications I've made an additional layer - managed_delivery.py. In order to use it you have to implement two abstract classes: one which will provide push notification from your datastore and will handle deletions and the other which will handle deletion of devices with invalid tokens in your datastore.
 Also it works correctly with multiple application bundle id which you might want to use in order to support separate version for App Store, beta list distribution, etc ( more on how to organize that see at http://swwritings.com/post/2013-05-20-concurrent-debug-beta-app-store-builds ).
 
-Here is the example of how to use:
+Here is the example of how to use it:
 
 ```python
-from datetime import datetime, timedelta
-from pymongo import MongoClient
+...
 from apns.apns import Payload
 from apns.managed_delivery import PushNotification, PushNotificationsProvider, SpecificPushNotificationsProvider, PushNotificationRelay, send, AbstractPushNotificationStore, AbstractDeviceStore
-from psl_server.globals import SETTINGS
-from psl_server.logger import log
-from psl_server.utils import pg_db_connection_from_url
-
+...
 
 __author__ = 'Denys Zadorozhnyi'
 
 PN_EXPIRY_DAYS = 3
-
-#log = get_task_logger(__name__)
-
 
 class DeviceStore(AbstractDeviceStore):
     def __init__(self):
@@ -138,22 +131,14 @@ class PushNotificationStore(AbstractPushNotificationStore):
         self.conn.close()
 
 
-def get_ssl_files(app_bundle_id, use_sandbox):
-    u_app_bundle_id = app_bundle_id.replace('.', '_')
-    backend_type = 'dev' if use_sandbox else 'distr'
-    cert_file = 'apns_ssl/Groceryx_APNS_SSL_%s_%s_cert.pem' % (u_app_bundle_id, backend_type)
-    key_file = 'apns_ssl/Groceryx_APNS_SSL_%s_%s_key.pem' % (u_app_bundle_id, backend_type)
-    return cert_file, key_file
-
-
-def send_for_app_bundle(bundle_id, device_store, is_sandbox, pn_provider):
+def send_pn_for_app_bundle(bundle_id, device_store, is_sandbox, pn_provider):
     spec_pn_provider = SpecificPushNotificationsProvider(pn_provider, bundle_id, is_sandbox)
     cert, key = get_ssl_files(bundle_id, is_sandbox)
     relay = PushNotificationRelay(cert, key, is_sandbox)
     send(spec_pn_provider, device_store, relay)
 
 
-def send_pending_push_notifications():
+def send_push_notifications():
     device_store = DeviceStore()
     pn_store = PushNotificationStore()
     pn_provider = PushNotificationsProvider(pn_store)

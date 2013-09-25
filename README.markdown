@@ -66,7 +66,7 @@ payload = Payload(alert="Hello World!", custom={'sekrit_number':123})
 ## Additional layer for managed delivery 
 by Denys Zadorozhnyi
 
-Rather then writing every time code to deal with invalid tokens from APNS feedback service and deleting sent push notifications I've made an additional layer - managed_delivery.py. In order to use it you have to implement two abstract classes: one which will provide push notification from your datastore and will handle deletions and the other which will handle deletion of devices with invalid tokens in your datastore.
+Rather then writing every time code to deal with invalid tokens from APNS feedback service and deleting sent push notifications I've made an additional layer on top of PyAPNs. In order to use it you have to implement two abstract classes: one which will provide push notification from your datastore and will handle deletions and the other which will handle deletion of devices with invalid tokens in your datastore.
 Also it works correctly with multiple application bundle id which you might want to use in order to support separate version for App Store, beta list distribution, etc ( more on how to organize that see at http://swwritings.com/post/2013-05-20-concurrent-debug-beta-app-store-builds ).
 
 Here is the example of how to use it:

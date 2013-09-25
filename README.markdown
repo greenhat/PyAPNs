@@ -9,6 +9,7 @@ Either download the source from GitHub or use easy_install:
 
     $ easy_install apns
 
+
 ## Sample usage
 
 ```python
@@ -62,6 +63,113 @@ of the Payload constructor.
 payload = Payload(alert="Hello World!", custom={'sekrit_number':123})
 ```
 
+## Additional layer for managed delivery 
+by Denys Zadorozhnyi
+
+Rather then writing every time code to deal with invalid tokens from APNS feedback service and deleting sent push notifications I've made an additional layer - managed_delivery.py. In order to use it you have to implement two abstract classes: one which will provide push notification from your datastore and will handle deletions and the other which will handle deletion of devices with invalid tokens in your datastore.
+Also it works correctly with multiple application bundle id which you might want to use in order to support separate version for App Store, beta list distribution, etc ( more on how to organize that see at http://swwritings.com/post/2013-05-20-concurrent-debug-beta-app-store-builds ).
+
+Here is the example of how to use:
+
+```python
+from datetime import datetime, timedelta
+from pymongo import MongoClient
+from apns.apns import Payload
+from apns.managed_delivery import PushNotification, PushNotificationsProvider, SpecificPushNotificationsProvider, PushNotificationRelay, send, AbstractPushNotificationStore, AbstractDeviceStore
+from psl_server.globals import SETTINGS
+from psl_server.logger import log
+from psl_server.utils import pg_db_connection_from_url
+
+
+__author__ = 'Denys Zadorozhnyi'
+
+PN_EXPIRY_DAYS = 3
+
+#log = get_task_logger(__name__)
+
+
+class DeviceStore(AbstractDeviceStore):
+    def __init__(self):
+        self.connection = pg_db_connection_from_url(SETTINGS['DATABASE_URI'])
+
+    def delete_devices_with_tokens(self, tokens):
+        assert len(tokens)
+        try:
+            log.info('deleting devices with tokens: %s', tokens)
+            cur = self.connection.cursor()
+            for t in tokens:
+                cur.execute('DELETE FROM device WHERE id = %s', [t])
+            self.connection.commit()
+            cur.close()
+        except Exception as e:
+            log.exception(e)
+
+    def close(self):
+        self.connection.close()
+
+
+class PushNotificationStore(AbstractPushNotificationStore):
+    def __init__(self):
+        mongo_host = SETTINGS['MONGODB_PN_HOST']
+        log.info('Connecting to MongoDB on %s', mongo_host)
+        self.conn = MongoClient(mongo_host, SETTINGS['MONGODB_PN_PORT'])
+        self.db = self.conn[SETTINGS['MONGODB_PN_DBNAME']]
+        self.mongo_ids = {}
+
+    def get_push_notifications(self):
+        notifications = []
+        raw_notifications = self.db.pending_push_notifications.find().sort('date_created')
+        for n in raw_notifications:
+            token = n['token']
+            payload = Payload(alert=n.get('alert'),
+                              custom=dict(et=n['event_type'], ep=n['event_param']))
+            expiry = datetime.utcnow() + timedelta(days=PN_EXPIRY_DAYS)
+            pn = PushNotification(token, payload, expiry, n['use_sandbox'], n['app_bundle_id'])
+            notifications.append(pn)
+            self.mongo_ids[pn.__repr__()] = n['_id']
+        return notifications
+
+    def delete_push_notifications(self, notifications):
+        notification_ids = [self.mongo_ids[n.__repr__()] for n in notifications]
+        log.info('deleting push notifications: %s', notifications)
+        self.db.pending_push_notifications.remove({'_id': {'$in': notification_ids}})
+
+    def close(self):
+        self.conn.close()
+
+
+def get_ssl_files(app_bundle_id, use_sandbox):
+    u_app_bundle_id = app_bundle_id.replace('.', '_')
+    backend_type = 'dev' if use_sandbox else 'distr'
+    cert_file = 'apns_ssl/Groceryx_APNS_SSL_%s_%s_cert.pem' % (u_app_bundle_id, backend_type)
+    key_file = 'apns_ssl/Groceryx_APNS_SSL_%s_%s_key.pem' % (u_app_bundle_id, backend_type)
+    return cert_file, key_file
+
+
+def send_for_app_bundle(bundle_id, device_store, is_sandbox, pn_provider):
+    spec_pn_provider = SpecificPushNotificationsProvider(pn_provider, bundle_id, is_sandbox)
+    cert, key = get_ssl_files(bundle_id, is_sandbox)
+    relay = PushNotificationRelay(cert, key, is_sandbox)
+    send(spec_pn_provider, device_store, relay)
+
+
+def send_pending_push_notifications():
+    device_store = DeviceStore()
+    pn_store = PushNotificationStore()
+    pn_provider = PushNotificationsProvider(pn_store)
+    for bundle_id in pn_provider.get_app_bundle_ids():
+        if bundle_id == 'com.groceryxapp.1':
+            send_for_app_bundle(bundle_id, device_store, False, pn_provider)
+        if bundle_id == 'com.groceryxapp.1.adhoc':
+            send_for_app_bundle(bundle_id, device_store, False, pn_provider)
+        if bundle_id == 'com.groceryxapp.1.debug':
+            send_for_app_bundle(bundle_id, device_store, True, pn_provider)
+    pn_store.close()
+    device_store.close()
+
+
+```
+
 ## Prepare SSL certs
 ```bash
 openssl pkcs12 -clcerts -nokeys -out cert.pem -in cert.p12
@@ -69,9 +177,6 @@ openssl pkcs12 -nocerts - nodes -out key.pem -in key.p12
 ```
 via https://blog.serverdensity.com/how-to-build-an-apple-push-notification-provider-server-tutorial/
 
-## Travis Build Status
-
-[![Build Status](https://secure.travis-ci.org/simonwhitaker/PyAPNs.png?branch=master)](http://travis-ci.org/simonwhitaker/PyAPNs)
 
 ## Further Info
 

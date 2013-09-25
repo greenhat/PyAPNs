@@ -143,11 +143,11 @@ def send_push_notifications():
     pn_store = PushNotificationStore()
     pn_provider = PushNotificationsProvider(pn_store)
     for bundle_id in pn_provider.get_app_bundle_ids():
-        if bundle_id == 'com.groceryxapp.1':
+        if bundle_id == 'com.appp.1':
             send_for_app_bundle(bundle_id, device_store, False, pn_provider)
-        if bundle_id == 'com.groceryxapp.1.adhoc':
+        if bundle_id == 'com.app.1.adhoc':
             send_for_app_bundle(bundle_id, device_store, False, pn_provider)
-        if bundle_id == 'com.groceryxapp.1.debug':
+        if bundle_id == 'com.app.1.debug':
             send_for_app_bundle(bundle_id, device_store, True, pn_provider)
     pn_store.close()
     device_store.close()

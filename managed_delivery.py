@@ -114,7 +114,7 @@ class PushNotificationRelay(object):
     def __init__(self, ssl_cert, ssl_key, use_sandbox):
         # how to prepare the certs:
         # openssl pkcs12 -clcerts -nokeys -out cert.pem -in cert.p12
-        # openssl pkcs12 -nocerts -nodes -out key.pem -in key.p12
+        # openssl pkcs12 -nocerts - nodes -out key.pem -in key.p12
         assert ssl_cert
         assert ssl_key
         self._ssl_cert = ssl_cert
@@ -125,6 +125,11 @@ class PushNotificationRelay(object):
     def connect(self):
         if self._apns:
             return
+        # checking if cert and key files exist
+        with open(self._ssl_cert):
+            pass
+        with open(self._ssl_key):
+            pass
         self._apns = APNs(use_sandbox=self._use_sandbox, cert_file=self._ssl_cert,
                           key_file=self._ssl_key, enhanced=True)
 

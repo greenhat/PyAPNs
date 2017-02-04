@@ -158,7 +158,7 @@ def send_push_notifications():
 ## Prepare SSL certs
 ```bash
 openssl pkcs12 -clcerts -nokeys -out cert.pem -in cert.p12
-openssl pkcs12 -nocerts - nodes -out key.pem -in key.p12
+openssl pkcs12 -nocerts -nodes -out key.pem -in key.p12
 ```
 via https://blog.serverdensity.com/how-to-build-an-apple-push-notification-provider-server-tutorial/
 
